@@ -260,5 +260,10 @@ describe("Controller", () => {
     await expect(controller.connect(commitor).unlock(name))
       .to.be.emit(controller, "Unlock")
       .withArgs(tokenId, commitor.address, feePrice);
+
+    // should not work as we already claimed
+    await expect(controller.connect(commitor).unlock(name))
+      .to.be.not.emit(controller, "Unlock")
+      .withArgs(tokenId, commitor.address, feePrice);
   });
 });

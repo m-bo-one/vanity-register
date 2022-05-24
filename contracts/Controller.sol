@@ -60,10 +60,24 @@ contract Controller is WithLock {
         return name.strlen() * ethPerLen;
     }
 
+    /**
+     * @dev Returns the token id delivered from name
+     *
+     * @param name a vanity name parameter for token id
+     * @return The token id number
+     */
     function getTokenId(string calldata name) internal pure returns (uint256) {
         return uint256(getNameKey(name));
     }
 
+    /**
+     * @dev Returns the commitment hash based on secret
+     *
+     * @param name a vanity name parameter
+     * @param owner a user who will be an owner on registration
+     * @param secret a secret phrase which could be generated dynamically for name reservation
+     * @return The commitment hash for reservation
+     */
     function createCommitment(
         string calldata name,
         address owner,
@@ -72,6 +86,13 @@ contract Controller is WithLock {
         return keccak256(abi.encodePacked(getNameKey(name), owner, secret));
     }
 
+    /**
+     * @dev Consume a commitment which was stored and return calculated price for vanity
+     *
+     * @param name a vanity name parameter
+     * @param commitment from generated secret in order to verify
+     * @return The price for name payer
+     */
     function consumeCommitment(string calldata name, bytes32 commitment)
         internal
         returns (uint256)
@@ -91,12 +112,22 @@ contract Controller is WithLock {
         return price;
     }
 
-    function _refund(uint256 amount) internal {
+    /**
+     * @dev Refund left amount from payer
+     *
+     * @param amount of tokens for diff refund
+     */
+    function refund(uint256 amount) internal {
         if (msg.value > amount) {
             payable(msg.sender).transfer(msg.value - amount);
         }
     }
 
+    /**
+     * @dev Commit generated off-chain commit to later registration
+     *
+     * @param commitment from generated secret in order to verify
+     */
     function commit(bytes32 commitment) public {
         require(
             _commitments[commitment] + commitTime < block.timestamp,
@@ -106,6 +137,13 @@ contract Controller is WithLock {
         emit Committed(commitment);
     }
 
+    /**
+     * @dev Register a reserved vanity from commitment
+     *
+     * @param name a vanity name parameter
+     * @param owner of reserved vanity
+     * @param secret a secret phrase which could be generated dynamically for name reservation
+     */
     function register(
         string calldata name,
         address owner,
@@ -119,11 +157,16 @@ contract Controller is WithLock {
 
         addLock(name, msg.sender, price, expires);
 
-        _refund(price);
+        refund(price);
 
         emit Registered(tokenId, owner, expires, msg.sender, price);
     }
 
+    /**
+     * @dev Renew a reserved vanity from vanity name
+     *
+     * @param name a vanity name parameter
+     */
     function renew(string calldata name) external payable {
         uint256 price = getFeePrice(name);
         require(msg.value >= price, "VC: Not enough amount");
@@ -133,11 +176,16 @@ contract Controller is WithLock {
 
         addLock(name, msg.sender, price, expires);
 
-        _refund(price);
+        refund(price);
 
         emit Renewed(tokenId, expires, msg.sender, price);
     }
 
+    /**
+     * @dev Unlock a reserved locked amount based on expiration
+     *
+     * @param name a vanity name parameter
+     */
     function unlock(string calldata name) external {
         uint256 tokenId = getTokenId(name);
         LockedAmount[] storage amounts = getLocks(name, msg.sender);

@@ -3,9 +3,11 @@ import * as dotenv from "dotenv";
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomiclabs/hardhat-etherscan";
 import "@nomiclabs/hardhat-waffle";
+import "@nomiclabs/hardhat-ethers";
 import "@typechain/hardhat";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
+import "hardhat-deploy";
 
 dotenv.config();
 
@@ -27,6 +29,9 @@ const config: HardhatUserConfig = {
   },
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY,
+  },
+  namedAccounts: {
+    deployer: 0,
   },
 };
 

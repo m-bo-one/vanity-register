@@ -4,6 +4,8 @@ import { expect } from "chai";
 
 import { Registrar } from "../typechain";
 
+import { getTestTimestamp } from "./utils";
+
 const setupTest = deployments.createFixture(
   async ({ deployments, getNamedAccounts, ethers }) => {
     await deployments.fixture(["Registrar"]);
@@ -13,14 +15,14 @@ const setupTest = deployments.createFixture(
       deployer
     );
     const chainId = +(await getChainId());
+    const testTimestamp = getTestTimestamp();
     return {
       registrar,
       chainId,
+      testTimestamp,
     };
   }
 );
-
-const testTimestamp = Math.floor(Date.now() / 1000) + 3600;
 
 describe("Registrar", () => {
   it("should add controller", async () => {
@@ -53,7 +55,7 @@ describe("Registrar", () => {
   });
 
   it("should register a new token", async () => {
-    const { registrar } = await setupTest();
+    const { registrar, testTimestamp } = await setupTest();
     const [controller, assetOwner] = await ethers.getSigners();
 
     await registrar.addController(controller.address);
@@ -81,7 +83,7 @@ describe("Registrar", () => {
   });
 
   it("should renew a new token", async () => {
-    const { registrar } = await setupTest();
+    const { registrar, testTimestamp } = await setupTest();
     const [controller, assetOwner] = await ethers.getSigners();
 
     await registrar.addController(controller.address);

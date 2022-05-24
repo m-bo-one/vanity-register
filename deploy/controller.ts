@@ -22,7 +22,13 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   await deploy("Controller", {
     from: deployer,
     skipIfAlreadyDeployed: true,
-    args: [registrar.address, 300, 3600, ethers.utils.parseEther("0.001"), 4],
+    args: [
+      registrar.address,
+      process.env.COMMIT_TIME,
+      process.env.DURATION_TIME,
+      ethers.utils.parseEther(process.env.ETH_PER_LEN as string),
+      process.env.MIN_NAME_LENGTH,
+    ],
     log: true,
   });
 };

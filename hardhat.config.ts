@@ -8,6 +8,7 @@ import "@typechain/hardhat";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
 import "hardhat-deploy";
+import { removeConsoleLog } from "hardhat-preprocessor";
 
 dotenv.config();
 
@@ -17,21 +18,25 @@ dotenv.config();
 const config: HardhatUserConfig = {
   solidity: "0.8.4",
   networks: {
-    ropsten: {
-      url: process.env.ROPSTEN_URL || "",
-      accounts:
-        process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+    hardhat: {
+      mining: {
+        auto: true,
+        interval: 5000,
+      },
     },
   },
   gasReporter: {
     enabled: process.env.REPORT_GAS !== undefined,
     currency: "USD",
   },
-  etherscan: {
-    apiKey: process.env.ETHERSCAN_API_KEY,
-  },
   namedAccounts: {
     deployer: 0,
+  },
+  preprocess: {
+    eachLine: removeConsoleLog(
+      (hre) =>
+        hre.network.name !== "hardhat" && hre.network.name !== "localhost"
+    ),
   },
 };
 

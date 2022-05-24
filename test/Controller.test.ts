@@ -4,6 +4,14 @@ import { expect } from "chai";
 
 import { Registrar, Controller } from "../typechain";
 
+import {
+  getTestTimestamp,
+  getTokenId,
+  createCommitment,
+  createSecret,
+  increaseTestTimestamp,
+} from "./utils";
+
 const setupTest = deployments.createFixture(
   async ({ deployments, getNamedAccounts, ethers }) => {
     await deployments.fixture(["Controller", "Registrar"]);
@@ -18,34 +26,15 @@ const setupTest = deployments.createFixture(
     );
     await registrar.addController(controller.address).then((tx) => tx.wait());
     const chainId = +(await getChainId());
+    const testTimestamp = getTestTimestamp();
     return {
       registrar,
       controller,
       chainId,
+      testTimestamp,
     };
   }
 );
-
-const getNameKey = (name: string) => {
-  return ethers.utils.keccak256(ethers.utils.toUtf8Bytes(name));
-};
-
-const getTokenId = (name: string) => {
-  return BigNumber.from(getNameKey(name));
-};
-
-const createSecret = (secret: string) => {
-  return ethers.utils.keccak256(ethers.utils.toUtf8Bytes(secret));
-};
-
-const createCommitment = (name: string, owner: string, secret: string) => {
-  return ethers.utils.solidityKeccak256(
-    ["bytes32", "address", "bytes32"],
-    [getNameKey(name), owner, createSecret(secret)]
-  );
-};
-
-const testTimestamp = Math.floor(Date.now() / 1000) + 3600;
 
 describe("Controller", () => {
   it("should get fee price with OK length", async () => {
@@ -89,7 +78,7 @@ describe("Controller", () => {
   });
 
   it("should register with known commitment and get stored", async () => {
-    const { controller, registrar } = await setupTest();
+    const { controller, registrar, testTimestamp } = await setupTest();
     const [, commitor] = await ethers.getSigners();
 
     const name = "test";
@@ -210,7 +199,7 @@ describe("Controller", () => {
   });
 
   it("should renew with known commitment and get stored", async () => {
-    const { controller, registrar } = await setupTest();
+    const { controller, registrar, testTimestamp } = await setupTest();
     const [, commitor, renewer] = await ethers.getSigners();
 
     const name = "test";
@@ -242,5 +231,34 @@ describe("Controller", () => {
     expect(await registrar.expiries(tokenId)).to.be.eq(
       block.timestamp + durationTime.toNumber() * 2
     );
+  });
+
+  it("should unlock amounts after expire period", async () => {
+    const { controller, testTimestamp } = await setupTest();
+    const [, commitor] = await ethers.getSigners();
+
+    const name = "test";
+    const secret = "megasecret";
+    const commitment = createCommitment(name, commitor.address, secret);
+    const tokenId = getTokenId(name);
+    const value = ethers.utils.parseEther("1");
+    const ethPerLen = await controller.callStatic.ethPerLen();
+    const feePrice = ethPerLen.mul(name.length);
+    const durationTime = await controller.durationTime();
+
+    await expect(controller.connect(commitor).commit(commitment));
+    await expect(
+      controller
+        .connect(commitor)
+        .register(name, commitor.address, createSecret(secret), { value })
+    );
+    await ethers.provider.getBlock("latest");
+
+    increaseTestTimestamp(durationTime.toNumber());
+    await ethers.provider.send("evm_increaseTime", [durationTime.toNumber()]);
+
+    await expect(controller.connect(commitor).unlock(name))
+      .to.be.emit(controller, "Unlock")
+      .withArgs(tokenId, commitor.address, feePrice);
   });
 });

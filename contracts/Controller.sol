@@ -6,8 +6,9 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 import "./libraries/StringUtils.sol";
 import "./Registrar.sol";
+import "./WithLock.sol";
 
-contract Controller {
+contract Controller is WithLock {
     using StringUtils for string;
     using ECDSA for bytes32;
 
@@ -15,10 +16,9 @@ contract Controller {
     uint256 public immutable commitTime;
     uint256 public immutable durationTime;
     uint256 public immutable ethPerLen;
-    uint8 public immutable maxNameLength;
+    uint8 public immutable minNameLength;
 
     mapping(bytes32 => uint256) internal _commitments;
-    mapping(bytes32 => uint256) internal _lockedAmounts;
 
     event Committed(bytes32 commitment);
     event Registered(
@@ -40,13 +40,13 @@ contract Controller {
         uint256 _commitTime,
         uint256 _durationTime,
         uint256 _ethPerLen,
-        uint8 _maxNameLength
+        uint8 _minNameLength
     ) {
         registrar = _registrar;
         commitTime = _commitTime;
         durationTime = _durationTime;
         ethPerLen = _ethPerLen;
-        maxNameLength = _maxNameLength;
+        minNameLength = _minNameLength;
     }
 
     /**
@@ -56,35 +56,23 @@ contract Controller {
      */
     function getFeePrice(string calldata name) public view returns (uint256) {
         uint256 length = name.strlen();
-        require(length >= maxNameLength, "VC: Length too short");
+        require(length >= minNameLength, "VC: Length too short");
         return name.strlen() * ethPerLen;
     }
 
-    function _getNameKey(string calldata name) internal pure returns (bytes32) {
-        return keccak256(bytes(name));
+    function getTokenId(string calldata name) internal pure returns (uint256) {
+        return uint256(getNameKey(name));
     }
 
-    function _getTokenId(string calldata name) internal pure returns (uint256) {
-        return uint256(_getNameKey(name));
-    }
-
-    function _createLockHash(string calldata name, address owner)
-        internal
-        pure
-        returns (bytes32)
-    {
-        return keccak256(abi.encodePacked(_getNameKey(name), owner));
-    }
-
-    function _createCommitment(
+    function createCommitment(
         string calldata name,
         address owner,
         bytes32 secret
     ) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked(_getNameKey(name), owner, secret));
+        return keccak256(abi.encodePacked(getNameKey(name), owner, secret));
     }
 
-    function _consumeCommitment(string calldata name, bytes32 commitment)
+    function consumeCommitment(string calldata name, bytes32 commitment)
         internal
         returns (uint256)
     {
@@ -93,7 +81,7 @@ contract Controller {
             "VC: Commit expired"
         );
 
-        require(registrar.available(_getTokenId(name)), "VC: Not available");
+        require(registrar.available(getTokenId(name)), "VC: Not available");
 
         delete (_commitments[commitment]);
 
@@ -123,12 +111,13 @@ contract Controller {
         address owner,
         bytes32 secret
     ) external payable {
-        bytes32 commitment = _createCommitment(name, owner, secret);
-        uint256 price = _consumeCommitment(name, commitment);
-        _lockedAmounts[_createLockHash(name, msg.sender)] += price;
+        bytes32 commitment = createCommitment(name, owner, secret);
+        uint256 price = consumeCommitment(name, commitment);
 
-        uint256 tokenId = _getTokenId(name);
+        uint256 tokenId = getTokenId(name);
         uint256 expires = registrar.register(tokenId, owner, durationTime);
+
+        addLock(name, msg.sender, price, expires);
 
         _refund(price);
 
@@ -139,10 +128,10 @@ contract Controller {
         uint256 price = getFeePrice(name);
         require(msg.value >= price, "VC: Not enough amount");
 
-        _lockedAmounts[_createLockHash(name, msg.sender)] += price;
-
-        uint256 tokenId = _getTokenId(name);
+        uint256 tokenId = getTokenId(name);
         uint256 expires = registrar.renew(tokenId, durationTime);
+
+        addLock(name, msg.sender, price, expires);
 
         _refund(price);
 
@@ -150,14 +139,16 @@ contract Controller {
     }
 
     function unlock(string calldata name) external {
-        require(registrar.available(_getTokenId(name)), "VC: Not available");
+        uint256 tokenId = getTokenId(name);
+        LockedAmount[] storage amounts = getLocks(name, msg.sender);
 
-        bytes32 lockHash = _createLockHash(name, msg.sender);
-        uint256 lockedAmount = _lockedAmounts[lockHash];
-        require(lockedAmount > 0, "VC: Nothing to unlock");
-
-        _lockedAmounts[lockHash] = 0;
-
-        payable(msg.sender).transfer(lockedAmount);
+        for (uint256 i = 0; i < amounts.length; i++) {
+            LockedAmount storage lockedAmount = amounts[i];
+            if (lockedAmount.time <= block.timestamp) {
+                lockedAmount.claimed = true;
+                payable(msg.sender).transfer(lockedAmount.value);
+                emit Unlock(tokenId, msg.sender, lockedAmount.value);
+            }
+        }
     }
 }

@@ -192,7 +192,7 @@ contract Controller is WithLock {
 
         for (uint256 i = 0; i < amounts.length; i++) {
             LockedAmount storage lockedAmount = amounts[i];
-            if (lockedAmount.time <= block.timestamp) {
+            if (lockedAmount.time <= block.timestamp && !lockedAmount.claimed) {
                 lockedAmount.claimed = true;
                 payable(msg.sender).transfer(lockedAmount.value);
                 emit Unlock(tokenId, msg.sender, lockedAmount.value);

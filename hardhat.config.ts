@@ -9,6 +9,7 @@ import "hardhat-gas-reporter";
 import "solidity-coverage";
 import "hardhat-deploy";
 import { removeConsoleLog } from "hardhat-preprocessor";
+import { getAccounts, getNodeUrl } from "./network";
 
 dotenv.config();
 
@@ -23,6 +24,12 @@ const config: HardhatUserConfig = {
         auto: true,
         interval: 5000,
       },
+    },
+    godwoken: {
+      chainId: 71401,
+      url: getNodeUrl("godwoken"),
+      accounts: getAccounts("godwoken"),
+      loggingEnabled: true,
     },
   },
   gasReporter: {
